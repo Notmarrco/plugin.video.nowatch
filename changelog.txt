@@ -1,0 +1,7 @@
+
+[B]Version 0.3[/B]
+
+- First usable version
+- Known bugs:
+	- works only with nowatchTV (not with nowatchFM, etc.)
+	- some shows won't play, don't know why ...
