@@ -6,6 +6,7 @@ import xbmcaddon
 import urllib
 import urllib2
 import re
+import os
 
 from BeautifulSoup import SoupStrainer
 from BeautifulSoup import BeautifulSoup
@@ -13,9 +14,9 @@ from BeautifulSoup import BeautifulSoup
 
 __plugin__ = 'nowatch.net'
 __author__ = 'notmarrco'
-__url__ = 'github'
-__date__ = '07-03-2012'
-__version__ = '0.3'
+__url__ = 'https://github.com/notmarrco/plugin.video.nowatch'
+__date__ = '17-09-2012'
+__version__ = '0.4'
 __settings__ = xbmcaddon.Addon(id='plugin.video.nowatch')
 # Path to the addon
 pathAddon = __settings__.getAddonInfo('path')
@@ -26,7 +27,6 @@ pathAddon = __settings__.getAddonInfo('path')
 # Pour se simplifier la vie, une fonction qui recupere le contenu d'une url
 def open_url(url):
     req = urllib2.Request(url)
-#    req.add_header('User-Agent', 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-GB; rv:1.9.2.8) Gecko/20100722 Firefox/3.6.8')
     content = urllib2.urlopen(req)
     data = content.read()
     content.close()
@@ -34,6 +34,7 @@ def open_url(url):
     return data
 
 # On construit le menu principal en 2 etapes :
+#
 # 1. Recuperation des categories (nowatch.tv, .fm, etc.)
 def get_categories(url):
     html = open_url(url)
@@ -47,10 +48,13 @@ def get_categories(url):
 # 2. Creation d'un dossier xbmc pour chaque categorie
 def build_categories_menu(url):
     cats_list = get_categories(url)
+    nb = len (cats_list.keys())
     for name, cat in cats_list.iteritems():
-        addDir(name,cat['url'],1,cat['img'])    
-    
+        addDir(name,cat['url'],1,cat['img'], nb)    
+ 
+   
 # Creation du sous menu, avec la liste des emissions, en 2 etapes egalement :
+#
 # 1. Recuperation des emissions   
 def get_shows(ss_cat_url, url):
     html = open_url(url)
@@ -63,24 +67,35 @@ def get_shows(ss_cat_url, url):
         ss_cats_list[name] = {'url' : show_url}
     return ss_cats_list
 
-# 2. Construction du sous menu      
+# 2. Construction du sous menu des emissions de nowatch, en fonction de la categorie (tv,fm...) donnee
 def build_shows_menu(name_cat, url, url_source):
     shows_list = get_shows(url, url_source)
+
+    nb = len(shows_list.keys()) #nbr d'emissions pour la fenetre de chargement
+
     for name, ss_cat in shows_list.iteritems():
-        page = open_url( ss_cat['url'])
-        img = re.findall("""<div class="aproposimg">.*?<img.*? src="([^"]+)" """,page) 
-        try:
-            img[0]
-        except :
-            img = ['default_todo']
-        addDir(clean(name),ss_cat['url'],2,img[0])
+        # on utilise les logos des emissions stockees en local 
+        # ou alors on les telecharge lors de la premiere utilisation
+        res = os.path.join(pathAddon, 'resources/logos/'+clean(name) + '.jpg')
+        if ( os.path.exists(res) ):
+            img = [res]
+        else:
+            page = open_url( ss_cat['url'])
+            img = re.findall("""<div class="aproposimg">.*?<img.*? src="([^"]+)" """,page) 
+            try:
+                img[0]
+                urllib.urlretrieve(img[0], res)
+                img = [res]
+            except :
+                img = ['default_todo']
+        addDir(clean(name),ss_cat['url'],2,img[0], nb)
 
 
 # Fonction qui construit le menu qui contient les episodes d'un show donne
-# TODO : ne fonctionne qu'avec nowatch TV pour l'instant        
 def build_episodes_menu(name, url):
     # On scanne la page pour trouver le lien rss
     page = open_url(url)
+    # On en profite pour recuperer l'image de l'episode (TODO : pour l'instant c'est celle du show global)
     logo_show = re.findall("""<div class="aproposimg">.*?<img.*? src="([^"]+)" """,page)
     try:
         logo_show[0]
@@ -89,7 +104,7 @@ def build_episodes_menu(name, url):
     beautifulSoup = BeautifulSoup(page)
     # TODO : on devrait pouvoir se passer de beautifulSoup ...
     quality = __settings__.getSetting('quality')
-    feeds = beautifulSoup.findAll("div", {'class' : 'feed'+quality.lower() } ) #ou feedsd
+    feeds = beautifulSoup.findAll("div", {'class' : 'feed'+quality.lower() } )
     try :
         feeds[0]
         url = feeds[0].a['href']
@@ -159,12 +174,12 @@ def addLink(name,url,iconimage):
     ok=xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz,isFolder=False)
     return ok
 
-def addDir(name,url,mode,iconimage):
+def addDir(name,url,mode,iconimage,nb):
     u=sys.argv[0]+"?url="+urllib.quote_plus(url)+"&mode="+str(mode)+"&name="+urllib.quote_plus(name)
     ok=True
     liz=xbmcgui.ListItem(name, iconImage="DefaultFolder.png", thumbnailImage=iconimage)
     liz.setInfo( type="Video", infoLabels={ "Title": name } )
-    ok=xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz,isFolder=True)
+    ok=xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz,isFolder=True, totalItems=nb)
     return ok
 
 def get_params():
